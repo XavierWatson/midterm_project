@@ -1,6 +1,6 @@
 
 class Game
-    attr_accessor :name, :pot, :player_turn, :game_state, :players, :hands
+    attr_accessor :name, :pot, :player_turn, :game_state, :players, :hands, :player_register
     @player_turn = 0
     @player_action = ''
     @pot = 0
@@ -13,9 +13,12 @@ class Game
         @players = []
         @hands = []
         initialize_players()
+        @player_register = @players
     end
-    def get_player(queue)
 
+    def fold_player(player)
+        player = @players[@player_turn+1]
+        $game.pass_turn()
     end
 
     def initialize_players()
@@ -43,6 +46,63 @@ class Game
 
     def current_player()
         return @players[@player_turn]
+    end
+
+    def raise_pot(amount)
+        @pot += amount
+    end
+
+    def score_winner()
+        winning_rating = 0
+        scoreboard = []
+        @players.each do |player|
+            scoreboard.append(player.grade_hand(player.hand.cards))
+        end
+        winning_rating = scoreboard.max
+        if scoreboard.count(winning_rating) > 1
+            @players.each do |player|
+                if player.hand.cards[0].rank == 'S'
+                    print("#{player.name} Wins the Pot of: $#{pot}")
+                    player.money += pot
+                    round_end()
+
+                elsif player.hand.cards[0].rank == 'H'
+                    print("#{player.name} Wins the Pot of: $#{pot}")
+                    player.money += pot
+                    round_end()
+
+                elsif player.hand.cards[0].rank == 'D'
+                    print("#{player.name} Wins the Pot of: $#{pot}")
+                    player.money += pot
+                    round_end()
+                end
+            end
+        end
+    end
+
+    def round_end()
+        @player_register.each do |registered_player|
+            if @players.count(registered_player) == 0
+                @players.append(registered_player)
+            end
+        end
+        $deck = Deck.new("Standard_Deck",[])
+    end
+    
+    def pass_turn()
+        @player_turn += 1
+        $game.current_player()
+        if @player_turn == @player_register.length-1
+            score_winner()
+        end
+        if @player_turn < @player_register.length
+        $game.current_player.draw_cards($game.current_player.hand.cards)
+        $game.current_player.visualise($game.current_player.hand.cards,$game.current_player)
+        print("Pot:#{$game.pot}\n")
+        print ("#{$game.current_player.name}'s Hand:#{$game.current_player.display}\n")
+        print("Value: #{$scores[$game.current_player.hand.grade_hand($game.current_player.hand.cards)]}\n")
+        $game.current_player.round_action($game.current_player)
+        end
     end
 end
 
@@ -142,7 +202,6 @@ class Hand < Deck
                 score_setup.append(rank)
             end
         end
-        print(dupes)
     ########### Grading
         if (['A','K','Q','J','10'] in rank_list) and (suit_list.count(suit_list[0]) == 5) #Royal Flush
             @rating = 9
@@ -165,19 +224,19 @@ class Hand < Deck
         else #High Card
             @rating = 0
         end
-        print(score_setup)
-        print($scores[rating])
+        return @rating
     end
 
 end
 
 class Player < Hand
-    attr_accessor :name,:hand, :display, :queue
+    attr_accessor :name,:hand, :display, :queue, :money
     def initialize(name,queue)
         @name = name
         @hand = gen_hand(@name)
         @display = []
         @queue = queue
+        @money = 25000
     end
 
     def visualise(cards,player_object)
@@ -189,17 +248,73 @@ class Player < Hand
     def pick_cards(selection,player_object)
         selection = selection.sort
         selection.reverse_each do |index|
-            player_object.hand.cards.delete_at(index)
+            player_object.hand.cards.delete_at(Integer(index))
             player_object.display = []
         end
         player_object.draw_cards(player_object.hand.cards)
         player_object.visualise(player_object.hand.cards,player_object)
     end
+    def round_action(player) #User Options for Betting and Discarding
+        discards = 3
+        discarded = []
+        bet = 0
+        print("Discard a card(s)? 'y/n'")
+        input = gets.chomp
+        while (input != ('y')) and (input != ('n'))
+            print("Please Choose 'y/n'\n Discard a Card(s)?")
+            input = gets.chomp
+        end
+        if input == 'y'
+            while discards != 0
+                until (input == '') or (discards == 0)
+                print("Pick a Card to Discard [0-4]. (#{discards} Remaining. Enter Empty to Complete)")
+                input = gets.chomp
+                    if discarded.count(input) == 0
+                        discarded.append(input)
+                    elsif
+                        print('invalid input, try again')
+                        discards += 1
+                    end
+                discards -= 1
+                end
+            end
+            if discarded.length > 0
+                player.pick_cards(discarded,player)
+            end
+        print ("#{$game.current_player.name}'s Hand:#{$game.current_player.display}\n")
+        print("Value: #{$scores[$game.current_player.hand.grade_hand($game.current_player.hand.cards)]}\n")
+        end
+        print("Raise or Fold? 'r/f'")
+        input = gets.chomp
+        while (input != 'f') and (input != 'r')
+            print('Invalid input, try again f/r')
+        end
+        if input == 'f'
+            $game.fold_player(player)
+            $game.pass_turn()
+        elsif input == 'r'
+            print('Input Bet Amount:\n$')
+            input = gets.chomp
+            while Integer(input) == false
+                print('[Invalid Input: Must Be Integer] Input Bet Amount:\n$')
+                input = gets.chomp
+            end 
+
+            while Integer(input) > player.money
+                print('[Not Enough Money Bet]Input Bet Amount:\n$')
+                while Integer(input) == false
+                    print('[Invalid Input: Must Be Integer] Input Bet Amount:\n$')
+                    input = gets.chomp
+                end 
+            end
+            bet = Integer(input)
+            $game.raise_pot(bet)
+            $game.pass_turn()
+        end
+    end
 end
-
-
 $deck = Deck.new("Standard_Deck",[])
-game = Game.new('Game')
+$game = Game.new('Game')
 
 #Init Deck Global
     #Generate Card Objects
@@ -207,9 +322,10 @@ game = Game.new('Game')
     #Shuffle Array of Card Objects
     $deck.shuffle_deck
 
-#Player TUrn Setup
-    game.current_player.draw_cards(game.current_player.hand.cards)
-    game.current_player.visualise(game.current_player.hand.cards,game.current_player)
-    print ("#{game.current_player.name}'s Hand:#{game.current_player.display}\n")
-    print("#{game.current_player.hand.grade_hand(game.current_player.hand.cards)}")
-
+#Player Turn Setup
+    $game.current_player.draw_cards($game.current_player.hand.cards)
+    $game.current_player.visualise($game.current_player.hand.cards,$game.current_player)
+    print("Pot:#{$game.pot}\n")
+    print ("#{$game.current_player.name}'s Hand:#{$game.current_player.display}\n")
+    print("Value: #{$scores[$game.current_player.hand.grade_hand($game.current_player.hand.cards)]}\n")
+    $game.current_player.round_action($game.current_player)
